@@ -1,0 +1,173 @@
+#!/bin/sh
+
+#        _       _                _      
+#       | |     | |              (_)     
+#   __ _| |_ __ | |__   __ ___  ___ _ __ 
+#  / _` | | '_ \| '_ \ / _` \ \/ / | '__| Shivaji Chalise (alphajr)
+# | (_| | | |_) | | | | (_| |>  <| | |    http://www.github.com/shivajichalise
+#  \__,_|_| .__/|_| |_|\__,_/_/\_\ |_|   
+#         | |                   _/ |     
+#         |_|                  |__/      
+#
+# youtube video downloader
+
+# FUNCTIONS
+
+# spinner
+spinnerArray=( '|' '/' '-' '\' )
+spin(){
+  clear
+  message=$1
+  while [ 1 ]
+  do
+    for i in "${spinnerArray[@]}"
+    do
+      echo -ne "\r$message $i"
+      sleep 0.2
+    done
+  done
+  clear
+}
+
+# fetch video info
+fetchVideoInfo(){
+  spin "Fetching video info" &
+  pid=$!
+  youtube-dl -F $videoLink > $cacheDir/temp
+  kill $pid
+}
+
+# fetch available video quality
+fetchVideoQualityList(){
+  spin "Listing available video quality" &
+  pid=$!
+  awk '{print $1 " " $4}' $cacheDir/temp | grep -v "only" | grep -v "webpage" | grep -v "resolution" | grep -v "for" | sort -t" " -k2 -nr | uniq -f1 > $cacheDir/quality
+  kill $pid
+}
+
+# get video download url
+getVideoDownloadUrl(){
+  videoQualityFormatCode=$1
+  videoLink=$2
+  spin "Processing video" &
+  pid=$!
+  videoDownloadUrl=$(youtube-dl -f "$videoQualityFormatCode" --youtube-skip-dash-manifest -g "$videoLink")
+  kill $pid
+  return 0
+}
+
+getAudioDownloadUrl(){
+  audioQualityFormatCode=$1
+  videoLink=$2
+  spin "Processing audio" &
+  pid=$!
+  audioDownloadUrl=$(youtube-dl -f "$audioQualityFormatCode" --youtube-skip-dash-manifest -g "$videoLink")
+  kill $pid
+  return 0
+}
+
+trimAndDownload(){
+  startTimestamp=$1
+  toTimestamp=$2
+  videoDownloadUrl=$3
+  audioDownloadUrl=$4
+  fileName=$5
+  spin "Downloading" &
+  pid=$!
+  ffmpeg -hide_banner -loglevel error -ss "$startTimestamp" -to "$toTimestamp" -i "$videoDownloadUrl" -ss "$startTimestamp" -to "$toTimestamp" -i "$audioDownloadUrl" -map 0:v -map 1:a -c:v libx264 -c:a aac "$fileName.mp4"
+  kill $pid
+  return 0
+}
+
+downloadFullVideo(){
+  videoQualityFormatCode=$1
+  audioQualityFormatCode=$2
+  videoLink=$3
+  spin "Downloading" &
+  pid=$!
+  youtube-dl -q -f $videoQualityFormatCode+$audioQualityFormatCode $videoLink
+  kill $pid
+  return 0
+}
+
+mkdir -p $HOME/.cache/ytvd
+cacheDir="$HOME/.cache/ytvd"
+
+if [ -z $1 ]; then
+  echo -n "Enter video link: "
+  read videoLink
+else
+  videoLink=$1
+fi
+
+fetchVideoInfo
+fetchVideoQualityList
+
+qualityList="$cacheDir/quality"
+declare -a array
+i=1
+j=1
+while read line
+do		
+	array[ $i ]=$j
+	(( j++ ))
+  
+  array[ ($i + 1) ]=$(echo $line | awk '{print $2}')
+        (( i=($i+2) ))
+	
+done < $qualityList
+
+TERMINAL=$(tty)
+HEIGHT=15
+WIDTH=50
+CHOICE_HEIGHT=16
+BACKTITLE="https://github.com/shivajichalise"
+TITLE="Choose Quality"
+MENU="Choose:"
+
+CHOICE=$(dialog --clear \
+                --backtitle "$BACKTITLE" \
+                --title "$TITLE" \
+                --menu "$MENU" \
+                $HEIGHT $WIDTH $CHOICE_HEIGHT \
+                "${array[@]}" \
+                2>&1 >$TERMINAL)
+
+if [ -z "$CHOICE" ]; then
+  clear
+  echo "None Selected"
+  exit 0
+else
+
+  videoQualityFormatCode=$(head -n $CHOICE $cacheDir/quality | tail -n +$CHOICE | cut -d " " -f1)
+  audioQualityFormatCode=$(grep -w m4a $cacheDir/temp | awk '{print $1}')
+  
+  videoDownloadUrl="v"
+  getVideoDownloadUrl $videoQualityFormatCode $videoLink
+
+  audioDownloadUrl="a"
+  getAudioDownloadUrl $audioQualityFormatCode $videoLink
+
+  clear
+  echo -n "Do you want to crop and download? (y/N) (default: N): "
+  read cropOrNot
+  
+  case $cropOrNot in 
+    y | Y)
+      echo "Give full timestamp! (if hours long video format: 00:00:00, if minutes long video format: 00:00)"
+      echo -n "From: "
+      read startTimestamp
+      echo -n "To: "
+      read toTimestamp
+      echo -n "Enter file name: "
+      read fileName
+      trimAndDownload $startTimestamp $toTimestamp $videoDownloadUrl $audioDownloadUrl $fileName
+      clear
+      ;;
+
+    *)
+      downloadFullVideo $videoQualityFormatCode $audioQualityFormatCode $videoLink
+      clear
+      ;;
+  esac
+fi
