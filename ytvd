@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 #        _       _                _      
 #       | |     | |              (_)     
@@ -15,14 +15,16 @@
 
 # spinner
 spinnerArray=( '|' '/' '-' '\' )
+
 spin(){
   clear
   message=$1
-  while [ 1 ]
+  while true
   do
     for i in "${spinnerArray[@]}"
     do
-      echo -ne "\r$message $i"
+      printf "\033c"
+      printf "%s" "$message $i"
       sleep 0.2
     done
   done
@@ -33,7 +35,7 @@ spin(){
 fetchVideoInfo(){
   spin "Fetching video info" &
   pid=$!
-  youtube-dl -F $videoLink > $cacheDir/temp
+  youtube-dl -F "$videoLink" > "$cacheDir"/temp
   kill $pid
 }
 
@@ -41,7 +43,7 @@ fetchVideoInfo(){
 fetchVideoQualityList(){
   spin "Listing available video quality" &
   pid=$!
-  awk '{print $1 " " $4}' $cacheDir/temp | grep -v "only" | grep -v "webpage" | grep -v "resolution" | grep -v "for" | sort -t" " -k2 -nr | uniq -f1 > $cacheDir/quality
+  awk '{print $1 " " $4}' "$cacheDir"/temp | grep -v "only" | grep -v "webpage" | grep -v "resolution" | grep -v "for" | sort -t" " -k2 -nr | uniq -f1 > "$cacheDir"/quality
   kill $pid
 }
 
@@ -85,17 +87,17 @@ downloadFullVideo(){
   videoLink=$3
   spin "Downloading" &
   pid=$!
-  youtube-dl -q -f $videoQualityFormatCode+$audioQualityFormatCode $videoLink
+  youtube-dl -q -f "$videoQualityFormatCode"+"$audioQualityFormatCode" "$videoLink"
   kill $pid
   return 0
 }
 
-mkdir -p $HOME/.cache/ytvd
+mkdir -p "$HOME"/.cache/ytvd
 cacheDir="$HOME/.cache/ytvd"
 
-if [ -z $1 ]; then
-  echo -n "Enter video link: "
-  read videoLink
+if [ -z "$1" ]; then
+  printf "Enter video link: "
+  read -r videoLink
 else
   videoLink=$1
 fi
@@ -107,15 +109,15 @@ qualityList="$cacheDir/quality"
 declare -a array
 i=1
 j=1
-while read line
+while read -r line
 do		
 	array[ $i ]=$j
 	(( j++ ))
   
-  array[ ($i + 1) ]=$(echo $line | awk '{print $2}')
-        (( i=($i+2) ))
+  array[ ($i + 1) ]=$(echo "$line" | awk '{print $2}')
+        (( i=i+2 ))
 	
-done < $qualityList
+done < "$qualityList"
 
 TERMINAL=$(tty)
 HEIGHT=15
@@ -131,7 +133,7 @@ CHOICE=$(dialog --clear \
                 --menu "$MENU" \
                 $HEIGHT $WIDTH $CHOICE_HEIGHT \
                 "${array[@]}" \
-                2>&1 >$TERMINAL)
+                2>&1 >"$TERMINAL")
 
 if [ -z "$CHOICE" ]; then
   clear
@@ -139,35 +141,36 @@ if [ -z "$CHOICE" ]; then
   exit 0
 else
 
-  videoQualityFormatCode=$(head -n $CHOICE $cacheDir/quality | tail -n +$CHOICE | cut -d " " -f1)
-  audioQualityFormatCode=$(grep -w m4a $cacheDir/temp | awk '{print $1}')
+  videoQualityFormatCode=$(head -n "$CHOICE" "$cacheDir"/quality | tail -n +"$CHOICE" | cut -d " " -f1)
+  audioQualityFormatCode=$(grep -w m4a "$cacheDir"/temp | awk '{print $1}')
   
   videoDownloadUrl="v"
-  getVideoDownloadUrl $videoQualityFormatCode $videoLink
+  getVideoDownloadUrl "$videoQualityFormatCode" "$videoLink"
 
   audioDownloadUrl="a"
-  getAudioDownloadUrl $audioQualityFormatCode $videoLink
-
+  getAudioDownloadUrl "$audioQualityFormatCode" "$videoLink"
   clear
-  echo -n "Do you want to crop and download? (y/N) (default: N): "
-  read cropOrNot
+  printf "Do you want to crop and download? (y/N) (default: N): "
+  read -r cropOrNot
   
   case $cropOrNot in 
     y | Y)
       echo "Give full timestamp! (if hours long video format: 00:00:00, if minutes long video format: 00:00)"
-      echo -n "From: "
-      read startTimestamp
-      echo -n "To: "
-      read toTimestamp
-      echo -n "Enter file name: "
-      read fileName
-      trimAndDownload $startTimestamp $toTimestamp $videoDownloadUrl $audioDownloadUrl $fileName
-      clear
+      printf "From: "
+      read -r startTimestamp
+      printf "To: "
+      read -r toTimestamp
+      printf "Enter file name: "
+      read -r fileName
+      trimAndDownload "$startTimestamp" "$toTimestamp" "$videoDownloadUrl" "$audioDownloadUrl" "$fileName"
+      printf "\033c"
+      printf "Download complete \n"
       ;;
 
     *)
-      downloadFullVideo $videoQualityFormatCode $audioQualityFormatCode $videoLink
-      clear
+      downloadFullVideo "$videoQualityFormatCode" "$audioQualityFormatCode" "$videoLink"
+      printf "\033c"
+      printf "Download complete \n"
       ;;
   esac
 fi
