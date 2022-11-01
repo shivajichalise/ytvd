@@ -30,7 +30,7 @@ it just runs `youtube-dl` and `ffmpeg` behind-the-scenes
 
 ## Self-Promotion
 
-Star the repository on [Github](https://github.com/shivajichalise/magnet)
+Star the repository on [Github](https://github.com/shivajichalise/ytvd)
 Follow [shivajichalise](http://shivajichalise.com.np) on [Github](https://github.com/shivajichalise)
 
 ## License
